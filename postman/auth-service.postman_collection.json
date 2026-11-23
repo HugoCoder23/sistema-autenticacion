@@ -1,0 +1,228 @@
+{
+  "info": {
+    "name": "Auth Service API",
+    "description": "Colección del sistema de autenticación (proyecto de portafolio, datos ficticios).\n\nEjecuta las carpetas en orden con el Runner. Postman guarda automáticamente la cookie HttpOnly `refresh_token`, así que refresh y logout funcionan sin copiar nada.\n\nVariables: `baseUrl` (por defecto http://localhost:8080) y `demoPassword`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "demoPassword", "value": "Demo1234!" },
+    { "key": "userToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "newEmail", "value": "" },
+    { "key": "resetToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Registro",
+      "item": [
+        {
+          "name": "Registrar cuenta (201)",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('newEmail', `postman.${Date.now()}@ejemplo.dev`);"] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.test('Rol USER y sin hash', () => { pm.expect(b.roles).to.eql(['USER']); pm.expect(b).to.not.have.property('passwordHash'); });"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Usuario Postman\",\n  \"email\": \"{{newEmail}}\",\n  \"password\": \"Secreta123\"\n}" }
+          }
+        },
+        {
+          "name": "Email duplicado (409)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('409 EMAIL_IN_USE', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().code).to.eql('EMAIL_IN_USE'); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Ana Copia\",\n  \"email\": \"ANA@auth.demo\",\n  \"password\": \"Secreta123\"\n}" }
+          }
+        },
+        {
+          "name": "Contraseña débil (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400 VALIDATION_ERROR en password', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().fieldErrors[0].field).to.eql('password'); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Débil\",\n  \"email\": \"debil@ejemplo.dev\",\n  \"password\": \"12345678\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Login",
+      "item": [
+        {
+          "name": "Login USER (200)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 con access token', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('userToken', pm.response.json().accessToken);",
+            "pm.test('Cookie refresh_token HttpOnly', () => pm.expect(pm.response.headers.get('Set-Cookie')).to.include('HttpOnly'));",
+            "pm.test('El refresh token no va en el cuerpo', () => pm.expect(pm.response.json()).to.not.have.property('refreshToken'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"ana@auth.demo\",\n  \"password\": \"{{demoPassword}}\"\n}" }
+          }
+        },
+        {
+          "name": "Login ADMIN (200)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('adminToken', pm.response.json().accessToken);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@auth.demo\",\n  \"password\": \"{{demoPassword}}\"\n}" }
+          }
+        },
+        {
+          "name": "Contraseña incorrecta (401 genérico)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('401 INVALID_CREDENTIALS', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().code).to.eql('INVALID_CREDENTIALS'); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"luis@auth.demo\",\n  \"password\": \"Incorrecta123\"\n}" }
+          }
+        },
+        {
+          "name": "Email inexistente (mismo 401)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Mismo mensaje que con contraseña incorrecta', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().message).to.eql('Email o contraseña incorrectos'); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"nadie@auth.demo\",\n  \"password\": \"Incorrecta123\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Acceso protegido",
+      "item": [
+        {
+          "name": "Mi perfil sin token (401)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('401', () => pm.response.to.have.status(401));"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/users/me" }
+        },
+        {
+          "name": "Mi perfil con token (200)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Sin passwordHash', () => pm.expect(pm.response.text()).to.not.include('passwordHash'));"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/api/users/me" }
+        },
+        {
+          "name": "Token alterado (401)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('401 INVALID_TOKEN', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().code).to.eql('INVALID_TOKEN'); });"] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}x" }], "url": "{{baseUrl}}/api/users/me" }
+        },
+        {
+          "name": "Mis sesiones (200)",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/api/users/me/sessions" }
+        },
+        {
+          "name": "USER en ruta ADMIN (403)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('403', () => pm.response.to.have.status(403));"] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }], "url": "{{baseUrl}}/api/admin/users" }
+        },
+        {
+          "name": "ADMIN lista usuarios (200)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('200 paginado', () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.have.property('totalElements'); });"] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/api/admin/users?page=0&size=10" }
+        },
+        {
+          "name": "ADMIN auditoría (200)",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/api/admin/audit-events?type=LOGIN&outcome=FAILURE" }
+        }
+      ]
+    },
+    {
+      "name": "4. Refresh y logout",
+      "item": [
+        {
+          "name": "Renovar (rota el refresh token)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200 con token nuevo', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('adminToken', pm.response.json().accessToken);"
+          ] } }],
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/auth/refresh" }
+        },
+        {
+          "name": "Cerrar sesión (204)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('204', () => pm.response.to.have.status(204));"] } }],
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/auth/logout" }
+        },
+        {
+          "name": "Token tras logout (401)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('La sesión revocada invalida el access token', () => pm.response.to.have.status(401));"] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/api/users/me" }
+        }
+      ]
+    },
+    {
+      "name": "5. Recuperación de contraseña",
+      "item": [
+        {
+          "name": "Solicitar enlace (202)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('202', () => pm.response.to.have.status(202));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/forgot-password",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{newEmail}}\"\n}" }
+          }
+        },
+        {
+          "name": "Leer bandeja simulada (solo dev)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const mail = pm.response.json().find(m => m.actionUrl);",
+            "pm.test('Hay un enlace de recuperación', () => pm.expect(mail).to.exist);",
+            "pm.collectionVariables.set('resetToken', mail.actionUrl.split('token=')[1]);"
+          ] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/dev/mailbox?to={{newEmail}}" }
+        },
+        {
+          "name": "Restablecer contraseña (200)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('200', () => pm.response.to.have.status(200));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/reset-password",
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"Recuperada123\"\n}" }
+          }
+        },
+        {
+          "name": "Reutilizar el token (400)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400 INVALID_RESET_TOKEN', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().code).to.eql('INVALID_RESET_TOKEN'); });"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/reset-password",
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"OtraVez12345\"\n}" }
+          }
+        }
+      ]
+    }
+  ]
+}

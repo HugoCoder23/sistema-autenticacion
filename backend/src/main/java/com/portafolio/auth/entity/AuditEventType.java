@@ -1,0 +1,17 @@
+package com.portafolio.auth.entity;
+
+public enum AuditEventType {
+    REGISTER,
+    LOGIN,
+    LOGIN_LOCKED,
+    LOGOUT,
+    TOKEN_REFRESH,
+    REFRESH_TOKEN_REUSE,
+    SESSION_REVOKED,
+    PASSWORD_CHANGE,
+    PASSWORD_RESET_REQUEST,
+    PASSWORD_RESET,
+    PROFILE_UPDATE,
+    ROLES_CHANGE,
+    ACCOUNT_STATUS_CHANGE
+}

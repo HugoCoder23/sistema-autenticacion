@@ -1,0 +1,29 @@
+package com.portafolio.auth.repository;
+
+import com.portafolio.auth.entity.PasswordResetToken;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.time.Instant;
+import java.util.Optional;
+
+public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
+
+    /** Bloquea la fila para que un mismo token no pueda usarse dos veces en paralelo. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from PasswordResetToken t join fetch t.user where t.tokenHash = :hash")
+    Optional<PasswordResetToken> findByHashForUpdate(@Param("hash") String hash);
+
+    /** Invalida los tokens pendientes del usuario: solo el último enlace enviado es válido. */
+    @Modifying(flushAutomatically = true)
+    @Query("update PasswordResetToken t set t.usedAt = :now where t.user.id = :userId and t.usedAt is null")
+    int invalidatePendingForUser(@Param("userId") Long userId, @Param("now") Instant now);
+
+    @Modifying
+    @Query("delete from PasswordResetToken t where t.expiresAt < :before")
+    int deleteExpiredBefore(@Param("before") Instant before);
+}
